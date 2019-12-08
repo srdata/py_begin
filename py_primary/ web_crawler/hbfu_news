@@ -1,0 +1,82 @@
+from selenium import webdriver
+from lxml import etree
+import time
+import re
+#import pymongo
+#from selenium.webdriver.support.ui import WebDriverWait
+#from selenium.webdriver.support import expected_conditions as EC
+#from selenium.webdriver.common.by import By
+
+next_btn_key = 1
+class Newsspider(object):
+    driver_path = r"D:\chromedriver\chromedriver.exe"
+    def __init__(self):
+        self.driver = webdriver.Chrome(executable_path=Newsspider.driver_path)
+        self.url = 'https://www.hbfu.edu.cn/newsList?type=1'
+        self.news = []
+    
+    def run(self):
+        self.driver.get(self.url)
+        while True:
+            source = self.driver.page_source
+#            WebDriverWait(driver=self.driver,timeout=10).until(
+#                    EC.presence_of_element_located((By.XPATH,"//a[@onclick='loadData({})']"))
+#                    )
+            self.parse_list_page(source)
+            global next_btn_key
+            next_btn_key += 1
+            next_btn = self.driver.find_element_by_xpath("//a[@onclick='loadData({})']".format(next_btn_key))
+            if "loadData(203)" in next_btn.get_attribute("onclick"):
+                break
+            else:
+                next_btn.click()
+            time.sleep(1)
+                
+    def parse_list_page(self,source):
+        html = etree.HTML(source)
+        cols = html.xpath("//a[@class='col-md-10 col-sm-9 col-xs-7']/@href")
+        for col in cols:
+            eurl = 'https://www.hbfu.edu.cn/' + col
+            self.request_detail_page(eurl)
+#            time.sleep(2)
+
+    def request_detail_page(self,url):
+#        self.driver.get(url)
+        self.driver.execute_script("window.open('%s')"%url)
+        self.driver.switch_to.window(self.driver.window_handles[1])
+#        WebDriverWait(self.driver,timeout=10).until(
+#                EC.presence_of_element_located((By.XPATH,"//h1[@id='title']"))
+#                )
+        source = self.driver.page_source
+        self.parse_detail_page(source)
+        self.driver.close()
+        self.driver.switch_to.window(self.driver.window_handles[0])
+        
+    def parse_detail_page(self,source):
+        html = etree.HTML(source)
+        news_title = html.xpath("//h1[@id='title']/text()")[0].strip()
+        news_createDate = html.xpath("//h3[@id='createDate']/text()")[0].strip()
+        news_text = html.xpath("//div[@id='contentP']/p[@style='text-indent:2em;']/text()")
+        str_news_text = ''.join(news_text)
+        pure_news_text_1 = re.sub(r"\n",'',str_news_text)
+        pure_news_text_2 = re.sub(r"\t",'',pure_news_text_1)
+        news = {
+                'news_title':news_title,
+                'news_createDate':news_createDate,
+                'news_text':pure_news_text_2
+        }
+        self.news.append(news)
+#        self.link_mongodb()
+        print(news)
+#    def link_mongodb(self):
+#        client = pymongo.MongoClient("127.0.0.1",port=27017)
+#        db = client.news
+#        collection = db.qa
+#        collection.insert(  {"news_title":'news_title'},
+#                            {'news_createDate':'news_createDate'},
+#                            {'news_text':'pure_news_text_2'} )
+        
+    
+if __name__ == '__main__':
+    spider = Newsspider()
+    spider.run()
